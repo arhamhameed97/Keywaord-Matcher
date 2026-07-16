@@ -1,0 +1,37 @@
+{
+  "title": "Harry Potter and the Sorcerer's Stone",
+  "year": "2001",
+  "plot": "Orphaned as a baby, Harry Potter is entrusted to his only living relatives, the Dursley family that is not related to the wizarding world, by Professor Albus Dumbledore , Professor Minerva McGonagall , and key keeper Rubeus Hagrid from Hogwarts School of Witchcraft and Wizardry . Due to their hatred of the wizarding world, the Dursleys keep Harry unaware of magic until his eleventh birthday approaches, when their home is flooded with letters addressed to Harry, informing him he has been accepted to study magic at Hogwarts. As the Dursleys intercept the letters, Hagrid is sent to fetch Harry. Harry subsequently purchases school supplies with Hagrid at Diagon Alley , where he learns he is celebrated for surviving the dark wizard Lord Voldemort , who seemingly perished after murdering Harry's parents and left him with only a lightning bolt shaped scar. Lord Voldemort had killed Lily and James Potter because of a prophecy that was seen about Harry having something to do with his downfall. Harry journeys to Hogwarts aboard the Hogwarts Express , where he meets Ron Weasley and Hermione Granger . Upon arrival, the first-year students are sorted into four houses: Harry, Ron, and Hermione join Gryffindor , while the haughty Draco Malfoy goes to Slytherin , known for producing dark wizards. As they begin learning about magic and exploring Hogwarts, the three accidentally wander onto a forbidden corridor on the third floor, guarded by a giant three-headed dog named Fluffy ; they subsequently question what it could be guarding. They also question how one would acquire a three-headed dog . While Harry and Ron become friends, Hermione's studious ways ostracise her from the other students. On Halloween , Ron insults her and she retreats to the girls' toilets at the same time a mountain troll is found loose in the school. Harry and Ron rescue her from the troll and, when the teachers find them, Hermione takes the blame by saying she went looking for the troll, affirming the three's friendship; at the same time, Harry notices potions professor Severus Snape has sustained an injury. At his first flying lesson, Harry displays such impressive flying skills that McGonagall makes him Seeker for the Gryffindor Quidditch team; during his first match, Ron and Hermione act when they see Snape appearing to jinx Harry's broomstick. Snape's actions lead Harry to suspect him of trying to get into the third-floor corridor, which Hagrid dismisses, unintentionally revealing Fluffy is guarding something known only to Dumbledore and Nicholas Flamel . Harry and Ron spend Christmas together at Hogwarts, where Harry receives a Cloak of Invisibility and discovers the Mirror of Erised , which displays one's deepest desire. When Hermione returns, she informs the boys that Nicholas Flamel is the creator of the Philosopher's Stone , which can grant users immortality, and determines that this is what is being kept on the third floor. When Harry later encounters someone in the forest surrounding the school feeding on a unicorn , which the centaur Firenze informs him can keep a person alive, Harry deduces that it was Voldemort and that Snape wants to use the Philosopher's Stone to revive him. When Dumbledore is summoned to London , the three suspect Snape will attempt to steal the stone and decide to stop him. They believed that he would use the stone to make sure that Voldemort would live forever as long as he had the stone. Sneaking onto the third floor, they get past Fluffy and face further defences of a strangling plant, flying keys, and a giant, enchanted chessboard, which leaves Ron incapacitated. Hermione tends to him, leaving Harry alone to confront the intruder, which turns out to be timid Professor Quirrell , whom Snape had been investigating all year while protecting Harry. Harry is granted the Stone by the final defence, the Mirror of Erised, by virtue of not desiring it. Quirrell reveals Voldemort's weakened form on the back of his head, and they attempt to persuade Harry to hand it over. When Harry refuses, Voldemort orders Quirrell to kill him, but Harry's touch incinerates Quirrell's body, from which Voldemort's soul escapes. Harry wakes up in the hospital wing, where Dumbledore explains that the Stone has been destroyed, and that Harry has twice overcome Voldemort owing to his mother 's sacrifice, which repels harmful magic through him. As the school year ends, Harry, Ron, Hermione, and Neville Longbottom earn house points for their heroism, enabling Gryffindor to win the House Cup despite Slytherin's lead. As the summer nears, Harry is happy to have found a real home at Hogwarts.",
+  "genres": [
+    "Adventure",
+    "Family",
+    "Fantasy"
+  ],
+  "country": "United Kingdom, United States",
+  "expected": {
+    "characteristicsPreferAnyOf": [
+      "Witches",
+      "Wizardry",
+      "Magic",
+      "School Life",
+      "Friendship",
+      "Orphan",
+      "Coming of age"
+    ],
+    "characteristicsExclude": [
+      "Atomic bombings of Hiroshima and Nagasaki",
+      "Vampire",
+      "Mermaids",
+      "Werewolf",
+      "WWII",
+      "WWI",
+      "Pearl Harbor",
+      "Attack on Pearl Harbor",
+      "D-Day"
+    ]
+  },
+  "plotShort": "An orphaned boy enrolls in Hogwarts School for Witchcraft and Wizardry, where he learns the truth about himself, his family and the terrible evil that haunts the magical world. With help from friends and magical allies, Harry discovers he is a wizard.",
+  "plotSource": "wikipedia-plot",
+  "wikipediaTitle": "Harry Potter and the Philosopher's Stone (film)",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Harry_Potter_and_the_Philosopher's_Stone_(film)"
+}

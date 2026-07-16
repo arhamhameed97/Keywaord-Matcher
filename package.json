@@ -1,0 +1,30 @@
+{
+  "name": "simplytv-keyword-helper",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "parse-keywords": "node scripts/parse-keywords.mjs",
+    "score-titanic": "npx --yes tsx scripts/score-gold.ts",
+    "score-gold": "npx --yes tsx scripts/score-gold.ts",
+    "score-gold-llm": "npx --yes tsx scripts/score-gold-llm.ts",
+    "update-gold-plots": "npx --yes tsx scripts/update-gold-plots.ts",
+    "predev": "node scripts/parse-keywords.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/parse-keywords.mjs",
+    "build": "tsc --noEmit && vite build",
+    "build:clean": "node scripts/build-clean.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

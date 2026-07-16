@@ -1,0 +1,65 @@
+{
+  "title": "Titanic",
+  "year": "1997",
+  "plot": "In 1996, aboard the research vessel Akademik Mstislav Keldysh , treasure hunter Brock Lovett and his team explore the wreck of RMS Titanic , hoping to find a necklace known as the Heart of the Ocean. Instead, they recover a safe containing a drawing of a young woman wearing the necklace. The sketch is dated April 14, 1912, the day the Titanic struck an iceberg and sank , resulting in about 1,500 deaths. After seeing a television report about the discovery, centenarian Rose Dawson Calvert contacts Lovett, revealing she is the woman in the drawing. Hoping she can help locate the necklace, Lovett brings Rose and her granddaughter aboard the Keldysh , where Rose recounts her experience on Titanic. In 1912, 17-year-old Rose DeWitt Bukater boards the Titanic in Southampton with her wealthy fiancé, Cal Hockley, and her mother, Ruth. Rose is unhappy in the loveless engagement, but Ruth stresses that the marriage will resolve their financial problems. Rose contemplates suicide by jumping from the ship's stern, but is stopped by Jack Dawson, a poor nomadic artist. Jack and Rose form a friendship, and Jack confesses his feelings for her. Though initially resistant, Rose realizes she has fallen in love with Jack, despite Cal's and Ruth's disapproval. Rose brings Jack to her stateroom and asks him to draw her nude, wearing only the necklace. Afterward, they evade Cal's valet, Spicer Lovejoy, and have sex in a car in the cargo hold. On the forward deck, they witness the ship's collision with an iceberg and overhear officers discussing the severity of the situation. When Cal discovers Jack's sketch of Rose, he has Lovejoy plant the necklace on Jack, framing him for theft. Jack is arrested and locked in the master-at-arms ' office, and Cal pockets the necklace. As Titanic sinks, women and children are prioritized for the lifeboats. Rose rescues Jack, and they return to the deck, where Cal urges Rose to board a lifeboat, claiming he and Jack will board another. Cal unwittingly wraps his coat, containing the necklace, around her. As her lifeboat is lowered, Rose jumps back onto the ship, unwilling to leave Jack behind. Enraged, Cal grabs a pistol and chases them through the flooding ship, but gives up when they escape. Cal joins a lifeboat by pretending to be a child's father. As the flooded bow sinks, the stern rises into the air, and Jack and Rose cling to the railing. The ship splits in two, and the stern sinks into the freezing water with the remaining passengers. Jack helps Rose onto floating debris and makes her promise to survive and live a full life. Jack dies from hypothermia , but Rose is saved by a returning lifeboat and rescued by the RMS Carpathia . Rose hides from Cal and her mother and gives her name as Rose Dawson on her arrival in New York City. In the present, Rose reveals that Cal committed suicide after losing his fortune in the 1929 stock market crash . She tells the Keldysh crew that Jack saved her in every possible way, and laments that her memories are all that she has left of him. Touched by her account, Lovett abandons his search for the necklace. Alone at night on the stern of the Keldysh , Rose, who has kept the necklace in her possession, drops it into the sea above the wreck. Later, as she lies in her bed, photographs on her dresser depict a life of freedom and adventure inspired by Jack. Aboard the pristine Titanic , a young Rose reunites with Jack at the Grand Staircase , applauded by the passengers and crew who died in the sinking.",
+  "genres": [
+    "Drama",
+    "Romance"
+  ],
+  "country": "United States, Mexico",
+  "expected": {
+    "characteristicsAnyOf": [
+      "Love tragedy",
+      "Class Difference",
+      "Historical drama",
+      "Tragic Events",
+      "Forbidden love/passion",
+      "Love triangles",
+      "A race against time/the clock",
+      "Inspired by true events",
+      "Blockbuster",
+      "Academy Award for Best Picture"
+    ],
+    "moodPrefer": [
+      "Heartrending",
+      "Tear Jerkers",
+      "Suspensful",
+      "Thrilling"
+    ],
+    "moodAvoid": [
+      "Feel-good",
+      "Sweet",
+      "Cheerful"
+    ],
+    "periodPrefer": [
+      "1900s",
+      "Flashbacks"
+    ],
+    "periodAvoid": [
+      "1990s"
+    ],
+    "settingGeoAnyOf": [
+      "UK",
+      "London",
+      "Europe"
+    ],
+    "settingPlaceAnyOf": [
+      "Seaside",
+      "Under the water",
+      "On an island",
+      "Out in the nature"
+    ],
+    "settingAvoid": [
+      "Las Vegas",
+      "Hollywood",
+      "Chicago",
+      "Broadway",
+      "Hawaii",
+      "Miami"
+    ]
+  },
+  "plotShort": "A seventeen-year-old aristocrat falls in love with a kind but poor artist aboard the luxurious, ill-fated R.M.S. Titanic. Set in 1912, the ocean liner sinks after striking an iceberg in the North Atlantic. Framed by present-day exploration with flashbacks of the voyage from Southampton, England, the romance becomes a love tragedy amid class difference and disaster.",
+  "plotSource": "wikipedia-plot",
+  "wikipediaTitle": "Titanic (1997 film)",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Titanic_(1997_film)"
+}
