@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { handlePickKeywordsRequest } from '../src/lib/pickKeywordsApi'
+import { handlePickKeywordsRequest } from './lib/handler'
 
 /** Legacy alias — defaults category to Characteristics when omitted. */
 export default async function handler(req: VercelRequest, res: VercelResponse) {

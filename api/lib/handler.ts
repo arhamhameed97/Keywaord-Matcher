@@ -2,8 +2,8 @@ import {
   callGeminiPickKeywords,
   type PickKeywordsRequest,
   type PickKeywordsResponse,
-} from './geminiCharacteristics'
-import type { SoftCategory } from './pickKeywords'
+} from './geminiCall'
+import type { SoftCategory } from './aiLimits'
 
 function parseCategory(raw: unknown): SoftCategory {
   if (
