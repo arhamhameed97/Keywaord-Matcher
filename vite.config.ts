@@ -1,9 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import {
-  callGeminiPickKeywords,
-  type PickKeywordsRequest,
-} from './src/lib/geminiCharacteristics'
+import { handlePickKeywordsRequest } from './src/lib/pickKeywordsApi'
 
 function geminiKeywordsProxy(): Plugin {
   return {
@@ -15,17 +12,6 @@ function geminiKeywordsProxy(): Plugin {
       ) => {
         const env = loadEnv(server.config.mode, server.config.root, '')
         const apiKey = env.GEMINI_API_KEY?.trim()
-        if (!apiKey) {
-          res.statusCode = 503
-          res.setHeader('Content-Type', 'application/json')
-          res.end(
-            JSON.stringify({
-              error:
-                'GEMINI_API_KEY not set. Add it to .env and restart the dev server.',
-            }),
-          )
-          return
-        }
 
         try {
           const raw = await new Promise<string>((resolve, reject) => {
@@ -36,34 +22,15 @@ function geminiKeywordsProxy(): Plugin {
             req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
             req.on('error', reject)
           })
-          const body = JSON.parse(raw) as PickKeywordsRequest & { category?: string }
-          if (!body?.title || !Array.isArray(body.candidates)) {
-            res.statusCode = 400
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: 'Invalid request body' }))
-            return
-          }
+          const body = JSON.parse(raw) as unknown
+          const { status, body: payload } = await handlePickKeywordsRequest(
+            body,
+            apiKey,
+          )
 
-          const category =
-            body.category === 'Mood' ||
-            body.category === 'Setting' ||
-            body.category === 'Period' ||
-            body.category === 'Characteristics'
-              ? body.category
-              : 'Characteristics'
-
-          const result = await callGeminiPickKeywords(apiKey, {
-            title: body.title,
-            year: body.year,
-            genres: body.genres ?? [],
-            plot: body.plot ?? '',
-            category,
-            candidates: body.candidates,
-          })
-
-          res.statusCode = 200
+          res.statusCode = status
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(result))
+          res.end(JSON.stringify(payload))
         } catch (err) {
           console.error('[pick-keywords]', err)
           res.statusCode = 502

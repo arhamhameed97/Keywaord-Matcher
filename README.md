@@ -32,7 +32,15 @@ Characteristics can be refined by **Gemini** (`gemini-3.1-flash-lite`, with Flas
 
 **Generate** always uses the local scorer first. Switch tabs to review each category; click **Improve {Category} with AI** when that category needs help. **Restore local {Category}** undoes AI for that tab only.
 
-Without this key, the AI button fails gracefully and local picks stay. Static `npm run preview` has no proxy — AI refine is unavailable there.
+Without this key, the AI button fails gracefully and local picks stay.
+
+### Deploying to Vercel
+
+1. Connect the GitHub repo and deploy with the default Vite settings
+2. In **Project → Settings → Environment Variables**, add:
+   - `VITE_OMDB_API_KEY` — for client-side OMDb lookup
+   - `GEMINI_API_KEY` — for `/api/pick-keywords` serverless routes (no `VITE_` prefix)
+3. Redeploy after adding env vars
 
 Eval with AI: `npm run score-gold-llm` (requires `GEMINI_API_KEY`). Local-only: `npm run score-gold`.
 
@@ -53,7 +61,7 @@ Open the URL Vite prints (usually `http://localhost:5173`).
 1. **Lookup** — OMDb (IMDb data) first; Wikipedia if OMDb misses or no key
 2. **Plot enrich** — Wikipedia Plot section when longer than OMDb synopsis
 3. **Score** — local genre/token boosts for all categories
-4. **Keywords AI (opt-in per tab)** — Gemini re-picks one category at a time via `/api/pick-keywords` (dev only) when you click the button
+4. **Keywords AI (opt-in per tab)** — Gemini re-picks one category at a time via `/api/pick-keywords` when you click the button (Vite proxy in dev; Vercel serverless in production)
 5. **Copy** — auto-selected pack ready for editorial
 
 Ambiguous titles (same name, different years) show a short candidate list.
