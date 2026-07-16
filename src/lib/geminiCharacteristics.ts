@@ -1,22 +1,39 @@
 /**
  * Client-safe Gemini types + pick validation.
- * Server-side Gemini calls live in api/lib/geminiCall.ts.
+ * Server-side Gemini calls live in api/pick-keywords.ts.
  */
 
-import type { LlmPick } from '../../api/lib/geminiCall'
+export interface LlmCandidate {
+  id: string
+  name: string
+  path: string[]
+}
 
-export type {
-  LlmCandidate,
-  LlmPick,
-  PickKeywordsRequest,
-  PickKeywordsResponse,
-} from '../../api/lib/geminiCall'
+export interface LlmPick {
+  id: string
+  name: string
+  rank: number
+  reason: string
+}
+
+export interface PickKeywordsRequest {
+  title: string
+  year?: string
+  genres: string[]
+  plot: string
+  category: 'Characteristics' | 'Mood' | 'Setting' | 'Period'
+  candidates: LlmCandidate[]
+}
+
+export interface PickKeywordsResponse {
+  picks: LlmPick[]
+}
 
 /** @deprecated use PickKeywordsRequest */
-export type { PickKeywordsRequest as PickCharacteristicsRequest } from '../../api/lib/geminiCall'
+export type PickCharacteristicsRequest = PickKeywordsRequest
 
 /** @deprecated use PickKeywordsResponse */
-export type { PickKeywordsResponse as PickCharacteristicsResponse } from '../../api/lib/geminiCall'
+export type PickCharacteristicsResponse = PickKeywordsResponse
 
 /**
  * Validate LLM picks against the candidate shortlist.

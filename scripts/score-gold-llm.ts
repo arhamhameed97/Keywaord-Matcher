@@ -15,7 +15,7 @@ import {
 } from '../src/lib/pickKeywords.ts'
 import {
   callGeminiPickKeywords,
-} from '../api/lib/geminiCall'
+} from '../api/pick-keywords.ts'
 import { validateLlmPicks } from '../src/lib/geminiCharacteristics.ts'
 import type { KeywordsSpace } from '../src/lib/types.ts'
 import type { MovieLookupResult } from '../src/lib/lookupMovie.ts'

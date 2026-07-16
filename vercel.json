@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/api/pick-characteristics", "destination": "/api/pick-keywords" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

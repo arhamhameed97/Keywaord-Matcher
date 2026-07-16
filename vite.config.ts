@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { handlePickKeywordsRequest } from './api/lib/handler'
+import { handlePickKeywordsRequest } from './api/pick-keywords'
 
 function geminiKeywordsProxy(): Plugin {
   return {
