@@ -8,6 +8,7 @@ import {
   type MovieLookupResult,
 } from './lib/lookupMovie'
 import {
+  buildAiCharacteristicsCandidates,
   mergeAiCategory,
   pickKeywordsForMovie,
   restoreLocalCategory,
@@ -18,6 +19,19 @@ import {
   type SoftCategory,
 } from './lib/pickKeywords'
 import { pickCategoryWithLlm } from './lib/llmCharacteristics'
+import {
+  clearUsageHistory,
+  formatTokens,
+  getUsageSnapshot,
+  setFreeTierLimits,
+  type UsageSnapshot,
+} from './lib/geminiUsage'
+import {
+  formatKeywordWithWeight,
+  normalizeWeightsTo100,
+  sumWeights,
+  WEIGHT_TOTAL,
+} from './lib/weights'
 import { groupByCategory, searchKeywords } from './lib/suggest'
 import { getPickReason } from './lib/plotEvidence'
 import type {
@@ -28,6 +42,8 @@ import type {
 } from './lib/types'
 
 const CATEGORY_ORDER = ['Characteristics', 'Mood', 'Setting', 'Period'] as const
+const USAGE_TAB = 'API Usage' as const
+type MainTab = (typeof CATEGORY_ORDER)[number] | typeof USAGE_TAB
 
 export default function App() {
   const [space, setSpace] = useState<KeywordsSpace | null>(null)
@@ -41,8 +57,8 @@ export default function App() {
   const [movie, setMovie] = useState<MovieLookupResult | null>(null)
   const [candidates, setCandidates] = useState<MovieCandidate[]>([])
   const [suggestions, setSuggestions] = useState<ScoredKeyword[]>([])
-  const [selected, setSelected] = useState<Map<string, KeywordEntry>>(new Map())
-  const [activeTab, setActiveTab] = useState<string>('Characteristics')
+  const [selected, setSelected] = useState<Map<string, ScoredKeyword>>(new Map())
+  const [activeTab, setActiveTab] = useState<MainTab>('Characteristics')
   const [searchQuery, setSearchQuery] = useState('')
   const [copyFormat, setCopyFormat] = useState<CopyFormat>('newline')
   const [copyFlash, setCopyFlash] = useState(false)
@@ -70,8 +86,27 @@ export default function App() {
     Setting: number
     Period: number
   }>(SOFT_MINIMUMS)
+  const [usageSnap, setUsageSnap] = useState<UsageSnapshot>(() =>
+    getUsageSnapshot(),
+  )
+  const [limitDraftRpd, setLimitDraftRpd] = useState(String(usageSnap.limits.rpd))
+  const [limitDraftRpm, setLimitDraftRpm] = useState(String(usageSnap.limits.rpm))
 
-  const activeCategory = activeTab as SoftCategory
+  const isUsageTab = activeTab === USAGE_TAB
+  const activeCategory = (
+    isUsageTab ? 'Characteristics' : activeTab
+  ) as SoftCategory
+
+  const refreshUsage = useCallback(() => {
+    const snap = getUsageSnapshot()
+    setUsageSnap(snap)
+    setLimitDraftRpd(String(snap.limits.rpd))
+    setLimitDraftRpm(String(snap.limits.rpm))
+  }, [])
+
+  useEffect(() => {
+    if (isUsageTab) refreshUsage()
+  }, [isUsageTab, refreshUsage])
 
   useEffect(() => {
     fetch('/keywords-space.json')
@@ -132,13 +167,15 @@ export default function App() {
     if (!movie || !localPickResult || !displayPickResult) return
     const category = activeCategory
     const shortlist =
-      localPickResult.categoryShortlists?.[category] ??
-      (category === 'Characteristics'
-        ? localPickResult.characteristicsShortlist
-        : undefined) ??
-      []
+      category === 'Characteristics' && space?.keywords?.length
+        ? buildAiCharacteristicsCandidates(space.keywords)
+        : (localPickResult.categoryShortlists?.[category] ??
+          (category === 'Characteristics'
+            ? localPickResult.characteristicsShortlist
+            : undefined) ??
+          [])
     if (shortlist.length === 0) {
-      setAiError(`No ${category} shortlist available for AI.`)
+      setAiError(`No ${category} candidates available for AI.`)
       return
     }
 
@@ -150,6 +187,7 @@ export default function App() {
         category,
         shortlist,
         genres: localPickResult.movieGenres,
+        keywords: space?.keywords,
       })
       const merged = mergeAiCategory(displayPickResult, category, aiPicks)
       applyResultToUi(movie, merged, { keepTab: true })
@@ -161,8 +199,17 @@ export default function App() {
       )
     } finally {
       setRefiningAi(false)
+      refreshUsage()
     }
-  }, [movie, localPickResult, displayPickResult, activeCategory, applyResultToUi])
+  }, [
+    movie,
+    localPickResult,
+    displayPickResult,
+    activeCategory,
+    applyResultToUi,
+    space?.keywords,
+    refreshUsage,
+  ])
 
   const restoreActiveCategoryLocal = useCallback(() => {
     if (!movie || !localPickResult || !displayPickResult) return
@@ -236,27 +283,43 @@ export default function App() {
     )
   }
 
-  const toggleSelect = (entry: KeywordEntry) => {
+  const toggleSelect = (entry: KeywordEntry | ScoredKeyword) => {
     setSelected((prev) => {
       const next = new Map(prev)
       if (next.has(entry.id)) next.delete(entry.id)
-      else next.set(entry.id, entry)
+      else {
+        const scored = entry as ScoredKeyword
+        next.set(entry.id, {
+          ...entry,
+          score: scored.score ?? 0,
+          reasons: scored.reasons ?? [],
+          weight: scored.weight,
+        })
+      }
       return next
     })
   }
 
-  const selectAllVisible = (items: KeywordEntry[]) => {
+  const selectAllVisible = (items: Array<KeywordEntry | ScoredKeyword>) => {
     setSelected((prev) => {
       const next = new Map(prev)
-      for (const item of items) next.set(item.id, item)
+      for (const item of items) {
+        const scored = item as ScoredKeyword
+        next.set(item.id, {
+          ...item,
+          score: scored.score ?? 0,
+          reasons: scored.reasons ?? [],
+          weight: scored.weight,
+        })
+      }
       return next
     })
   }
 
   const copySelected = useCallback(async () => {
-    const names = [...selected.values()].map((k) => k.name)
-    if (names.length === 0) return
-    const text = copyFormat === 'comma' ? names.join(', ') : names.join('\n')
+    const lines = [...selected.values()].map((k) => formatKeywordWithWeight(k))
+    if (lines.length === 0) return
+    const text = copyFormat === 'comma' ? lines.join(', ') : lines.join('\n')
     await navigator.clipboard.writeText(text)
     setCopyFlash(true)
     window.setTimeout(() => setCopyFlash(false), 1600)
@@ -264,22 +327,96 @@ export default function App() {
 
   const clearSelection = () => setSelected(new Map())
 
+  /** Tweak one keyword weight in the selection map. */
+  const updateWeight = (id: string, raw: number) => {
+    setSelected((prev) => {
+      const current = prev.get(id)
+      if (!current) return prev
+      const next = new Map(prev)
+      next.set(id, { ...current, weight: Math.max(0, Math.floor(raw) || 0) })
+      return next
+    })
+  }
+
+  /** Re-normalize selected weights for a category so they sum to 100. */
+  const renormSelectedCategory = (category: SoftCategory) => {
+    setSelected((prev) => {
+      const inCat = [...prev.values()].filter((k) => k.category === category)
+      if (inCat.length === 0) return prev
+      if (
+        category === 'Characteristics' &&
+        inCat.length !== SOFT_MINIMUMS.Characteristics
+      ) {
+        return prev
+      }
+      const normalized = normalizeWeightsTo100(inCat, (item) =>
+        item.weight != null && item.weight > 0 ? item.weight : 1,
+      )
+      const next = new Map(prev)
+      for (const item of normalized) next.set(item.id, item)
+
+      setSuggestions((sug) =>
+        sug.map((s) => {
+          const n = normalized.find((x) => x.id === s.id)
+          return n ? { ...s, weight: n.weight } : s
+        }),
+      )
+      setDisplayPickResult((cur) => {
+        if (!cur) return cur
+        const byCategory = { ...cur.byCategory }
+        byCategory[category] = (byCategory[category] ?? []).map((s) => {
+          const n = normalized.find((x) => x.id === s.id)
+          return n ? { ...s, weight: n.weight } : s
+        })
+        return {
+          ...cur,
+          byCategory,
+          picked: [
+            ...(byCategory.Characteristics ?? []),
+            ...(byCategory.Mood ?? []),
+            ...(byCategory.Setting ?? []),
+            ...(byCategory.Period ?? []),
+          ],
+        }
+      })
+      return next
+    })
+  }
+
+  const watermark = (
+    <div className="watermark" aria-hidden="true">
+      <div className="watermark-track">
+        <img src="/watermark/selfie.png" alt="" />
+        <img src="/watermark/cat-cone.png" alt="" />
+        <img src="/watermark/cat-cuddle.png" alt="" />
+        <img src="/watermark/kitten.png" alt="" />
+        <img src="/watermark/selfie.png" alt="" />
+      </div>
+    </div>
+  )
+
   if (loadError) {
     return (
-      <div className="shell">
-        <p className="error">Could not load keyword space: {loadError}</p>
-        <p className="hint">
-          Run <code>npm run parse-keywords</code> then restart the dev server.
-        </p>
-      </div>
+      <>
+        {watermark}
+        <div className="shell">
+          <p className="error">Could not load keyword space: {loadError}</p>
+          <p className="hint">
+            Run <code>npm run parse-keywords</code> then restart the dev server.
+          </p>
+        </div>
+      </>
     )
   }
 
   if (!space) {
     return (
-      <div className="shell">
-        <p className="muted">Loading keyword space…</p>
-      </div>
+      <>
+        {watermark}
+        <div className="shell">
+          <p className="muted">Loading keyword space…</p>
+        </div>
+      </>
     )
   }
 
@@ -287,11 +424,13 @@ export default function App() {
   const omdbReady = hasOmdbKey()
   const activeSource = categorySources[activeCategory]
   const activeShortlist =
-    localPickResult?.categoryShortlists?.[activeCategory] ??
-    (activeCategory === 'Characteristics'
-      ? localPickResult?.characteristicsShortlist
-      : undefined) ??
-    []
+    activeCategory === 'Characteristics' && space.keywords.length > 0
+      ? buildAiCharacteristicsCandidates(space.keywords)
+      : (localPickResult?.categoryShortlists?.[activeCategory] ??
+        (activeCategory === 'Characteristics'
+          ? localPickResult?.characteristicsShortlist
+          : undefined) ??
+        [])
 
   const floorForCategory = (cat: SoftCategory) =>
     categorySources[cat] === 'ai'
@@ -299,7 +438,9 @@ export default function App() {
       : pickFloors[cat]
 
   return (
-    <div className="shell">
+    <>
+      {watermark}
+      <div className="shell">
       <header className="top">
         <div>
           <p className="eyebrow">Simply.TV editorial helper</p>
@@ -521,9 +662,20 @@ export default function App() {
                 </button>
               )
             })}
+            <button
+              type="button"
+              className={isUsageTab ? 'tab on' : 'tab'}
+              onClick={() => setActiveTab(USAGE_TAB)}
+              title="Gemini free-tier usage"
+            >
+              {USAGE_TAB}
+              <em>
+                {usageSnap.requestsLeftToday}/{usageSnap.limits.rpd} left
+              </em>
+            </button>
           </div>
 
-          {hasGenerated && (
+          {hasGenerated && !isUsageTab && (
             <div className="chars-actions tab-ai-bar">
               <p className="chars-status">
                 <span
@@ -565,7 +717,203 @@ export default function App() {
             </div>
           )}
 
-          {!hasGenerated ? (
+          {isUsageTab ? (
+            <section className="usage-panel">
+              <p className="usage-lede">
+                Tracks Gemini calls from this browser only (free-tier estimate).
+                Match the daily/minute limits to your{' '}
+                <a
+                  href="https://aistudio.google.com/rate-limit"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  AI Studio rate limits
+                </a>
+                . Do not enable billing if you want to stay on free tokens.
+              </p>
+
+              <div className="usage-meters">
+                <div className="usage-meter">
+                  <h3>Requests today (RPD)</h3>
+                  <p className="usage-big">
+                    <strong>{usageSnap.day.requests}</strong>
+                    <span> / {usageSnap.limits.rpd}</span>
+                  </p>
+                  <p className="usage-left">
+                    <strong>{usageSnap.requestsLeftToday}</strong> left today
+                  </p>
+                  <div
+                    className="usage-bar"
+                    role="progressbar"
+                    aria-valuenow={usageSnap.day.requests}
+                    aria-valuemax={usageSnap.limits.rpd}
+                  >
+                    <span
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (usageSnap.day.requests / usageSnap.limits.rpd) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <small className="muted">{usageSnap.resetHint}</small>
+                </div>
+
+                <div className="usage-meter">
+                  <h3>Last minute (RPM)</h3>
+                  <p className="usage-big">
+                    <strong>{usageSnap.requestsLastMinute}</strong>
+                    <span> / {usageSnap.limits.rpm}</span>
+                  </p>
+                  <p className="usage-left">
+                    <strong>{usageSnap.rpmLeft}</strong> left this minute
+                  </p>
+                  <div
+                    className="usage-bar"
+                    role="progressbar"
+                    aria-valuenow={usageSnap.requestsLastMinute}
+                    aria-valuemax={usageSnap.limits.rpm}
+                  >
+                    <span
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (usageSnap.requestsLastMinute / usageSnap.limits.rpm) *
+                            100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="usage-meter">
+                  <h3>Tokens today</h3>
+                  <p className="usage-big">
+                    <strong>{formatTokens(usageSnap.day.totalTokens)}</strong>
+                  </p>
+                  <p className="muted usage-token-split">
+                    in {formatTokens(usageSnap.day.promptTokens)} · out{' '}
+                    {formatTokens(usageSnap.day.candidatesTokens)}
+                    {usageSnap.day.errors > 0
+                      ? ` · ${usageSnap.day.errors} failed`
+                      : ''}
+                  </p>
+                  <small className="muted">
+                    Pacific day key: {usageSnap.dayKey}
+                  </small>
+                </div>
+              </div>
+
+              <div className="usage-limits">
+                <h3>Assumed free limits</h3>
+                <p className="muted">
+                  Defaults are conservative Flash-Lite ballparks. Edit to match
+                  AI Studio for your project.
+                </p>
+                <div className="usage-limit-row">
+                  <label>
+                    RPD
+                    <input
+                      type="number"
+                      min={1}
+                      value={limitDraftRpd}
+                      onChange={(e) => setLimitDraftRpd(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    RPM
+                    <input
+                      type="number"
+                      min={1}
+                      value={limitDraftRpm}
+                      onChange={(e) => setLimitDraftRpm(e.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      const next = setFreeTierLimits({
+                        rpd: Number(limitDraftRpd),
+                        rpm: Number(limitDraftRpm),
+                      })
+                      setUsageSnap(next)
+                    }}
+                  >
+                    Save limits
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          'Clear local AI usage history for this browser?',
+                        )
+                      ) {
+                        return
+                      }
+                      setUsageSnap(clearUsageHistory())
+                    }}
+                  >
+                    Clear history
+                  </button>
+                </div>
+              </div>
+
+              <div className="usage-history">
+                <h3>Per try</h3>
+                {usageSnap.history.length === 0 ? (
+                  <p className="empty">
+                    No AI calls yet. Use Improve … with AI on a category tab.
+                  </p>
+                ) : (
+                  <ul className="usage-log">
+                    {usageSnap.history.map((ev) => (
+                      <li key={ev.id} className={ev.ok ? 'ok' : 'fail'}>
+                        <div className="usage-log-main">
+                          <strong>{ev.title}</strong>
+                          <span className="usage-log-meta">
+                            {ev.category}
+                            {ev.model ? ` · ${ev.model}` : ''}
+                            {' · '}
+                            {new Date(ev.at).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="usage-log-stats">
+                          {ev.ok ? (
+                            <>
+                              <span>
+                                {ev.totalTokens.toLocaleString()} tok
+                                <small>
+                                  {' '}
+                                  (in {ev.promptTokens.toLocaleString()} / out{' '}
+                                  {ev.candidatesTokens.toLocaleString()})
+                                </small>
+                              </span>
+                              <span>
+                                {ev.attempts} HTTP attempt
+                                {ev.attempts === 1 ? '' : 's'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="usage-fail-msg">
+                              Failed
+                              {ev.error ? `: ${ev.error}` : ''}
+                              {ev.attempts > 1
+                                ? ` · ${ev.attempts} attempts`
+                                : ''}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          ) : !hasGenerated ? (
             <p className="empty">
               Enter a title and click Generate for local picks. Switch tabs to
               review each category; use <strong>Improve … with AI</strong> on
@@ -583,11 +931,45 @@ export default function App() {
                 >
                   Select all in tab
                 </button>
+                {(() => {
+                  const catItems = [...selected.values()].filter(
+                    (k) => k.category === activeCategory,
+                  )
+                  const wSum = sumWeights(catItems)
+                  const needEight =
+                    activeCategory === 'Characteristics' &&
+                    catItems.length !== SOFT_MINIMUMS.Characteristics
+                  return (
+                    <span
+                      className={
+                        wSum === WEIGHT_TOTAL && !needEight
+                          ? 'weight-sum ok'
+                          : 'weight-sum warn'
+                      }
+                    >
+                      Weights: {wSum}/{WEIGHT_TOTAL}
+                      {needEight
+                        ? ` (need ${SOFT_MINIMUMS.Characteristics} Characteristics)`
+                        : ''}
+                    </span>
+                  )
+                })()}
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => renormSelectedCategory(activeCategory)}
+                  title="Rebalance selected weights in this category to sum 100"
+                >
+                  Normalize to 100
+                </button>
               </div>
               <div className="kw-list">
                 {tabItems.map((item) => {
                   const scored = item as ScoredKeyword
                   const pickReason = getPickReason(scored.reasons)
+                  const selectedItem = selected.get(item.id)
+                  const weight =
+                    selectedItem?.weight ?? scored.weight
                   return (
                     <label key={item.id} className="row">
                       <input
@@ -602,6 +984,32 @@ export default function App() {
                           <small className="pick-reason">
                             {pickReason.text}
                           </small>
+                        )}
+                      </span>
+                      <span
+                        className="weight-cell"
+                        onClick={(e) => e.preventDefault()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      >
+                        {selected.has(item.id) ? (
+                          <input
+                            type="number"
+                            className="weight-input"
+                            min={0}
+                            max={100}
+                            value={weight ?? 0}
+                            aria-label={`Weight for ${item.name}`}
+                            onChange={(e) =>
+                              updateWeight(item.id, Number(e.target.value))
+                            }
+                            onBlur={() =>
+                              renormSelectedCategory(activeCategory)
+                            }
+                          />
+                        ) : (
+                          <span className="weight-badge" title="Weight">
+                            {weight ?? '—'}
+                          </span>
                         )}
                       </span>
                     </label>
@@ -620,11 +1028,14 @@ export default function App() {
             <span className="preview floors">
               {CATEGORY_ORDER.map((cat) => {
                 const softCat = cat as SoftCategory
-                const n = [...selected.values()].filter((k) => k.category === cat)
-                  .length
+                const items = [...selected.values()].filter(
+                  (k) => k.category === cat,
+                )
+                const n = items.length
                 const min = floorForCategory(softCat)
                 const tag = categorySources[softCat] === 'ai' ? '*' : ''
-                return `${cat.slice(0, 4)} ${n}/${min}${tag}`
+                const w = sumWeights(items)
+                return `${cat.slice(0, 4)} ${n}/${min}${tag} w${w}`
               }).join(' · ')}
             </span>
           )}
@@ -659,5 +1070,6 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </>
   )
 }

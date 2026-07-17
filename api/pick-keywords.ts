@@ -8,7 +8,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // --- limits & types ---
 
 const AI_CATEGORY_LIMITS = {
-  Characteristics: { min: 6, max: 10, shortlist: 80 },
+  /** Characteristics AI uses the full pickable taxonomy; exactly 8 with weights → 100. */
+  Characteristics: { min: 8, max: 8, shortlist: 80 },
   Mood: { min: 4, max: 6, shortlist: 50 },
   Setting: { min: 2, max: 4, shortlist: 40 },
   Period: { min: 2, max: 4, shortlist: 40 },
@@ -27,19 +28,34 @@ export interface LlmPick {
   name: string
   rank: number
   reason: string
+  /** Relative editorial weight; client normalizes the pack to sum 100. */
+  weight?: number
 }
 
 export interface PickKeywordsRequest {
   title: string
   year?: string
   genres: string[]
+  /** Primary / long plot (usually Wikipedia Plot section). */
   plot: string
+  /** Optional short OMDb synopsis shown separately in the prompt. */
+  plotShort?: string
   category: SoftCategory
   candidates: LlmCandidate[]
 }
 
+export interface GeminiUsageMeta {
+  model: string
+  promptTokenCount: number
+  candidatesTokenCount: number
+  totalTokenCount: number
+  /** HTTP attempts including retries / model fallbacks for this Improve call. */
+  attempts: number
+}
+
 export interface PickKeywordsResponse {
   picks: LlmPick[]
+  usage?: GeminiUsageMeta
 }
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite'
@@ -52,12 +68,14 @@ const GEMINI_MODEL_FALLBACKS = [
 const PLOT_TRUNCATE = 6000
 
 const CATEGORY_RULES: Record<SoftCategory, string> = {
-  Characteristics: `You pick Simply.TV Characteristics keywords for a movie.
+  Characteristics: `You pick Simply.TV Characteristics keywords for a movie from OMDb and/or Wikipedia plot text.
 - ONLY choose from the provided candidates list. Never invent names or ids.
+- Infer central story themes from the plot even when the keyword wording does not appear verbatim (synonyms and implied themes are allowed).
 - Prefer central themes over incidental mentions (a one-line prop is not a theme).
-- Prefer diversity across topic branches (path prefixes), not many near-duplicates.
+- Prefer diversity across topic branches (path prefixes), not many near-duplicates (at most a few from the same path branch).
 - Do not pick sensitive historical leaves (WWII, WWI, Hiroshima, Pearl Harbor, D-Day, etc.) unless the plot explicitly is about that event.
-- Avoid generic parent-like labels; prefer concrete leaf themes.`,
+- Avoid generic parent-like labels; prefer concrete leaf themes.
+- Use both the OMDb summary and the Wikipedia plot when both are provided; Wikipedia usually has more detail.`,
   Mood: `You pick Simply.TV Mood keywords for a movie.
 - ONLY choose from the provided candidates list. Never invent names or ids.
 - Match the dominant emotional tone of the story (tragedy → heartrending/suspenseful; comedy → cheerful; horror → scary).
@@ -77,26 +95,42 @@ const CATEGORY_RULES: Record<SoftCategory, string> = {
 
 function systemRulesFor(category: SoftCategory): string {
   const limits = AI_CATEGORY_LIMITS[category]
+  const countRule =
+    limits.min === limits.max
+      ? `Return exactly ${limits.min} picks, ranked best-first.`
+      : `Return ${limits.min} to ${limits.max} picks, ranked best-first.`
   return `${CATEGORY_RULES[category]}
-- Return ${limits.min} to ${limits.max} picks, ranked best-first.
-- Respond with JSON only matching: {"picks":[{"id":"...","name":"...","rank":1,"reason":"..."}]}`
+- ${countRule}
+- Assign each pick an integer weight (importance within this category only). Weights should sum to about 100; more central themes get higher weights.
+- Respond with JSON only matching: {"picks":[{"id":"...","name":"...","rank":1,"weight":25,"reason":"..."}]}`
 }
 
 function buildGeminiUserPrompt(req: PickKeywordsRequest): string {
-  const plot = req.plot.slice(0, PLOT_TRUNCATE)
+  const longPlot = (req.plot ?? '').slice(0, PLOT_TRUNCATE)
+  const shortPlot = (req.plotShort ?? '').trim().slice(0, 2000)
   const candidates = req.candidates.map((c) => ({
     id: c.id,
     name: c.name,
     path: c.path.join(' > '),
   }))
+
+  const plotSection: string[] = []
+  if (shortPlot && shortPlot !== longPlot) {
+    plotSection.push('OMDb summary:', shortPlot, '')
+    plotSection.push('Wikipedia plot:', longPlot || '(none)')
+  } else if (shortPlot) {
+    plotSection.push('OMDb summary:', shortPlot)
+  } else {
+    plotSection.push('Plot:', longPlot || '(none)')
+  }
+
   return [
     `Category: ${req.category}`,
     `Title: ${req.title}`,
     req.year ? `Year: ${req.year}` : null,
     `Genres: ${req.genres.join(', ') || 'unknown'}`,
     '',
-    'Plot:',
-    plot,
+    ...plotSection,
     '',
     'Candidates (choose only from these):',
     JSON.stringify(candidates),
@@ -150,6 +184,7 @@ export async function callGeminiPickKeywords(
   ]
   const systemRules = systemRulesFor(req.category)
   let lastError: Error | null = null
+  let httpAttempts = 0
 
   for (const model of models) {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -172,6 +207,7 @@ export async function callGeminiPickKeywords(
       }
 
       try {
+        httpAttempts += 1
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -195,6 +231,11 @@ export async function callGeminiPickKeywords(
           candidates?: Array<{
             content?: { parts?: Array<{ text?: string }> }
           }>
+          usageMetadata?: {
+            promptTokenCount?: number
+            candidatesTokenCount?: number
+            totalTokenCount?: number
+          }
         }
         const text =
           json.candidates?.[0]?.content?.parts
@@ -206,7 +247,21 @@ export async function callGeminiPickKeywords(
         }
 
         const picks = parseGeminiPicksJson(text)
-        return { picks }
+        const meta = json.usageMetadata
+        const promptTokenCount = meta?.promptTokenCount ?? 0
+        const candidatesTokenCount = meta?.candidatesTokenCount ?? 0
+        const totalTokenCount =
+          meta?.totalTokenCount ?? promptTokenCount + candidatesTokenCount
+        return {
+          picks,
+          usage: {
+            model,
+            promptTokenCount,
+            candidatesTokenCount,
+            totalTokenCount,
+            attempts: httpAttempts,
+          },
+        }
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err))
         if (
@@ -262,6 +317,7 @@ export async function handlePickKeywordsRequest(
       year: req.year,
       genres: req.genres ?? [],
       plot: req.plot ?? '',
+      plotShort: typeof req.plotShort === 'string' ? req.plotShort : undefined,
       category: parseCategory(req.category),
       candidates: req.candidates,
     })

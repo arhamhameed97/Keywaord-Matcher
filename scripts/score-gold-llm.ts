@@ -7,16 +7,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  buildCharacteristicsShortlist,
+  buildAiCharacteristicsCandidates,
+  diversifyAiCharacteristics,
   mergeAiCharacteristics,
   pickKeywordsForMovieLocal,
   settingKind,
   AI_CHARACTERISTICS_FLOOR,
+  AI_CATEGORY_LIMITS,
 } from '../src/lib/pickKeywords.ts'
 import {
   callGeminiPickKeywords,
 } from '../api/pick-keywords.ts'
 import { validateLlmPicks } from '../src/lib/geminiCharacteristics.ts'
+import { applyAiWeights } from '../src/lib/weights.ts'
 import type { KeywordsSpace } from '../src/lib/types.ts'
 import type { MovieLookupResult } from '../src/lib/lookupMovie.ts'
 import type { ScoredKeyword } from '../src/lib/types.ts'
@@ -65,13 +68,14 @@ function check(label: string, ok: boolean, detail = '') {
 
 async function pickWithLlm(movie: MovieLookupResult) {
   const local = pickKeywordsForMovieLocal(space.keywords, movie)
-  const shortlist = buildCharacteristicsShortlist(space.keywords, movie)
+  const shortlist = buildAiCharacteristicsCandidates(space.keywords)
   const byId = new Map(shortlist.map((s) => [s.id, s]))
   const { picks } = await callGeminiPickKeywords(apiKey!, {
     title: movie.title,
     year: movie.year,
     genres: local.movieGenres,
     plot: movie.plot,
+    plotShort: movie.plotShort,
     category: 'Characteristics',
     candidates: shortlist.map((s) => ({
       id: s.id,
@@ -81,11 +85,19 @@ async function pickWithLlm(movie: MovieLookupResult) {
   })
   const validated = validateLlmPicks(picks, byId, {
     min: AI_CHARACTERISTICS_FLOOR,
-    max: 10,
+    max: AI_CATEGORY_LIMITS.Characteristics.max,
   })
-  const aiChars: ScoredKeyword[] = validated.map(
-    ({ rank: _r, ...rest }) => rest,
-  )
+  const rawAi: ScoredKeyword[] = validated.map(({ rank: _r, ...rest }) => rest)
+  const diversified = diversifyAiCharacteristics(rawAi, space.keywords, {
+    min: AI_CHARACTERISTICS_FLOOR,
+    max: AI_CATEGORY_LIMITS.Characteristics.max,
+  })
+  const weightById = new Map<string, number>()
+  for (const p of picks) {
+    const w = Number(p.weight)
+    if (p.id && Number.isFinite(w) && w > 0) weightById.set(p.id, w)
+  }
+  const aiChars = applyAiWeights(diversified, weightById)
   return mergeAiCharacteristics(local, aiChars)
 }
 
@@ -117,6 +129,15 @@ async function runCase(name: string, file: string) {
     `${name} Characteristics floor`,
     chars.length >= AI_CHARACTERISTICS_FLOOR,
     String(chars.length),
+  )
+  const charWeightSum = result.byCategory.Characteristics.reduce(
+    (a, k) => a + (k.weight ?? 0),
+    0,
+  )
+  check(
+    `${name} Characteristics weights = 100`,
+    charWeightSum === 100,
+    String(charWeightSum),
   )
   check(`${name} characteristicsSource ai`, result.characteristicsSource === 'ai')
   check(`${name} Mood floor`, moods.length >= 4, String(moods.length))

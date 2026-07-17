@@ -14,6 +14,7 @@ export interface LlmPick {
   name: string
   rank: number
   reason: string
+  weight?: number
 }
 
 export interface PickKeywordsRequest {
@@ -21,12 +22,23 @@ export interface PickKeywordsRequest {
   year?: string
   genres: string[]
   plot: string
+  /** Optional short OMDb synopsis (sent separately from long Wikipedia plot). */
+  plotShort?: string
   category: 'Characteristics' | 'Mood' | 'Setting' | 'Period'
   candidates: LlmCandidate[]
 }
 
+export interface GeminiUsageMeta {
+  model: string
+  promptTokenCount: number
+  candidatesTokenCount: number
+  totalTokenCount: number
+  attempts: number
+}
+
 export interface PickKeywordsResponse {
   picks: LlmPick[]
+  usage?: GeminiUsageMeta
 }
 
 /** @deprecated use PickKeywordsRequest */
@@ -41,7 +53,17 @@ export type PickCharacteristicsResponse = PickKeywordsResponse
  */
 export function validateLlmPicks(
   picks: LlmPick[],
-  shortlistById: Map<string, { id: string; name: string; path: string[]; pathLabel: string; category: string; searchable: string }>,
+  shortlistById: Map<
+    string,
+    {
+      id: string
+      name: string
+      path: string[]
+      pathLabel: string
+      category: string
+      searchable: string
+    }
+  >,
   options?: { min?: number; max?: number },
 ): Array<{
   id: string
@@ -53,6 +75,7 @@ export function validateLlmPicks(
   score: number
   reasons: string[]
   rank: number
+  weight?: number
 }> {
   const min = options?.min ?? 6
   const max = options?.max ?? 10
@@ -67,11 +90,10 @@ export function validateLlmPicks(
     score: number
     reasons: string[]
     rank: number
+    weight?: number
   }> = []
 
-  const sorted = [...picks].sort(
-    (a, b) => (a.rank ?? 99) - (b.rank ?? 99),
-  )
+  const sorted = [...picks].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
 
   for (const pick of sorted) {
     if (!pick?.id || seen.has(pick.id)) continue
@@ -79,11 +101,15 @@ export function validateLlmPicks(
     if (!entry) continue
     seen.add(pick.id)
     const reason = (pick.reason || '').trim().slice(0, 120)
+    const rawWeight = Number(pick.weight)
+    const weight =
+      Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : undefined
     out.push({
       ...entry,
       score: 100 - out.length,
       reasons: reason ? [`ai:${reason}`] : ['ai'],
       rank: out.length + 1,
+      weight,
     })
     if (out.length >= max) break
   }

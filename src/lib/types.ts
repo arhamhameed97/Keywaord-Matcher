@@ -33,6 +33,8 @@ export interface KeywordsSpace {
 export interface ScoredKeyword extends KeywordEntry {
   score: number
   reasons: string[]
+  /** Editorial weight within category; category pack sums to 100. */
+  weight?: number
 }
 
 export type CopyFormat = 'newline' | 'comma'

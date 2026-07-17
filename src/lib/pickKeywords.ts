@@ -10,6 +10,7 @@ import {
 import { attachPlotEvidence } from './plotEvidence'
 import { suggestKeywords, tokenize } from './suggest'
 import type { KeywordEntry, ScoredKeyword } from './types'
+import { assignWeightsFromScores } from './weights'
 
 export const SOFT_MINIMUMS = {
   Characteristics: 8,
@@ -20,11 +21,15 @@ export const SOFT_MINIMUMS = {
 
 /** Floor when a category comes from the LLM. */
 export const AI_CATEGORY_LIMITS = {
-  Characteristics: { min: 6, max: 10, shortlist: 80 },
+  /** Characteristics AI uses the full pickable taxonomy; exactly 8 with weights → 100. */
+  Characteristics: { min: 8, max: 8, shortlist: 80 },
   Mood: { min: 4, max: 6, shortlist: 50 },
   Setting: { min: 2, max: 4, shortlist: 40 },
   Period: { min: 2, max: 4, shortlist: 40 },
 } as const
+
+/** Max Characteristics picks sharing the same mid-path branch after AI. */
+export const AI_CHARACTERISTICS_MAX_PER_BRANCH = 3
 
 /** @deprecated use AI_CATEGORY_LIMITS.Characteristics */
 export const AI_CHARACTERISTICS_FLOOR = AI_CATEGORY_LIMITS.Characteristics.min
@@ -622,9 +627,76 @@ export function restoreLocalCategory(
 }
 
 /**
- * Top pickable Characteristics for LLM selection.
- * Prefer locally scored leaves, then pad with other pickable leaves up to cap
- * so central themes the lexical scorer missed remain available.
+ * Full pickable Characteristics taxonomy for plot-first AI selection.
+ * Independent of local lexical scores — Gemini sees every valid leaf/theme.
+ */
+export function buildAiCharacteristicsCandidates(
+  keywords: KeywordEntry[],
+): ScoredKeyword[] {
+  return keywords
+    .filter((k) => isPickableCharacteristic(k, keywords))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => ({
+      ...entry,
+      score: 0,
+      reasons: ['ai-candidate'],
+    }))
+}
+
+/**
+ * Enforce branch diversity + near-duplicate suppression on AI Characteristics
+ * picks (same rails as local packing). Preserves rank order when possible.
+ */
+export function diversifyAiCharacteristics(
+  picks: ScoredKeyword[],
+  keywords: KeywordEntry[],
+  options?: { min?: number; max?: number; maxPerBranch?: number },
+): ScoredKeyword[] {
+  const min = options?.min ?? AI_CATEGORY_LIMITS.Characteristics.min
+  const max = options?.max ?? AI_CATEGORY_LIMITS.Characteristics.max
+  const maxPerBranch =
+    options?.maxPerBranch ?? AI_CHARACTERISTICS_MAX_PER_BRANCH
+
+  const ranked = picks.filter((k) => isPickableCharacteristic(k, keywords))
+  const pool = ranked.length > 0 ? ranked : picks
+
+  const picked: ScoredKeyword[] = []
+  const branchCounts = new Map<string, number>()
+
+  const tryAdd = (item: ScoredKeyword, force = false) => {
+    if (picked.some((p) => p.id === item.id)) return false
+    if (!force && picked.some((p) => isNearDuplicate(p, item))) return false
+    const branch = midBranchKey(item)
+    const count = branchCounts.get(branch) ?? 0
+    // Always enforce branch cap unless force-filling to meet min
+    if (!force && count >= maxPerBranch) return false
+    picked.push(item)
+    branchCounts.set(branch, count + 1)
+    return true
+  }
+
+  for (const item of pool) {
+    tryAdd(item)
+    if (picked.length >= max) break
+  }
+
+  if (picked.length < min) {
+    for (const item of pool) {
+      tryAdd(item, true)
+      if (picked.length >= min) break
+    }
+  }
+
+  return picked.slice(0, max).map((item, i) => ({
+    ...item,
+    score: 100 - i,
+  }))
+}
+
+/**
+ * Top pickable Characteristics from local scoring (UI / Mood-style shortlists).
+ * Prefer locally scored leaves, then pad with other pickable leaves up to cap.
+ * Characteristics Improve-with-AI uses {@link buildAiCharacteristicsCandidates} instead.
  */
 export function buildCharacteristicsShortlist(
   keywords: KeywordEntry[],
@@ -695,7 +767,7 @@ export function pickKeywordsForMovie(
     Characteristics: pickWithBranchCap(
       ranked.filter((k) => isPickableCharacteristic(k, keywords)),
       SOFT_MINIMUMS.Characteristics,
-      12,
+      SOFT_MINIMUMS.Characteristics,
       0.85,
       3,
     ),
@@ -735,6 +807,17 @@ export function pickKeywordsForMovie(
       byCategory[cat].push(item)
       if (byCategory[cat].length >= need) break
     }
+  }
+
+  // Characteristics: hard cap at exactly 8
+  byCategory.Characteristics = byCategory.Characteristics.slice(
+    0,
+    SOFT_MINIMUMS.Characteristics,
+  )
+
+  // Editorial weights: each category pack sums to 100
+  for (const cat of Object.keys(SOFT_MINIMUMS) as SoftCategory[]) {
+    byCategory[cat] = assignWeightsFromScores(byCategory[cat])
   }
 
   const picked = attachPlotEvidence(
